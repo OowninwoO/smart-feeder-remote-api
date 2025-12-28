@@ -4,6 +4,7 @@ const { firebaseAuthMiddleware } = require("../middlewares/firebase_auth_middlew
 
 const router = express.Router();
 
+/// 기기 등록하기
 router.post("/register", firebaseAuthMiddleware, async (req, res) => {
   const { deviceId, deviceName, location } = req.body;
   const userId = req.uid;
@@ -61,6 +62,49 @@ router.post("/register", firebaseAuthMiddleware, async (req, res) => {
       });
     }
 
+    return res.status(500).json({
+      success: false,
+      message: e.message,
+      data: null,
+    });
+  } finally {
+    client.release();
+  }
+});
+
+/// 내 기기 조회하기
+router.get("/my-devices", firebaseAuthMiddleware, async (req, res) => {
+  const userId = req.uid;
+  const client = await db.connect();
+
+  try {
+    const result = await client.query(
+      `
+      select
+        d.id,
+        d.device_id as "deviceId",
+        d.device_name as "deviceName",
+        d.location,
+        d.created_at as "createdAt",
+        ud.role,
+        ud.created_at as "linkedAt"
+      from user_devices ud
+      join devices d on d.id = ud.device_pk
+      where ud.user_id = $1
+      order by
+        (ud.role = 'owner') desc,
+        ud.created_at desc;
+      `,
+      [userId]
+    );
+
+    return res.json({
+      success: true,
+      message: "내 기기 목록 조회에 성공했습니다.",
+      data: result.rows,
+    });
+  } catch (e) {
+    console.error(e);
     return res.status(500).json({
       success: false,
       message: e.message,
