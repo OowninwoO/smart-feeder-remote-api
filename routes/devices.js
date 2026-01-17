@@ -115,4 +115,83 @@ router.get("/my-devices", firebaseAuthMiddleware, async (req, res) => {
   }
 });
 
+/// 기기 삭제(owner는 기기 자체 삭제, member는 내 연결만 해제)
+router.delete("/:deviceId", firebaseAuthMiddleware, async (req, res) => {
+  const userId = req.uid;
+  const { deviceId } = req.params;
+
+  const client = await db.connect();
+
+  try {
+    await client.query("begin");
+
+    const targetResult = await client.query(
+      `
+      select
+        d.id as "devicePk",
+        ud.role
+      from devices d
+      join user_devices ud on ud.device_pk = d.id
+      where d.device_id = $1
+        and ud.user_id = $2;
+      `,
+      [deviceId, userId]
+    );
+
+    if (targetResult.rowCount === 0) {
+      await client.query("rollback");
+      return res.status(404).json({
+        success: false,
+        message: "기기를 찾을 수 없습니다.",
+        data: null,
+      });
+    }
+
+    const { devicePk, role } = targetResult.rows[0];
+
+    if (role === "owner") {
+      await client.query(
+        `
+        delete from devices
+        where id = $1;
+        `,
+        [devicePk]
+      );
+    } else {
+      await client.query(
+        `
+        delete from user_devices
+        where user_id = $1
+          and device_pk = $2;
+        `,
+        [userId, devicePk]
+      );
+    }
+
+    await client.query("commit");
+
+    return res.json({
+      success: true,
+      message: "기기가 삭제되었습니다.",
+      data: { deviceId, role },
+    });
+  } catch (e) {
+    console.error(e);
+
+    try {
+      await client.query("rollback");
+    } catch (rollbackError) {
+      console.error(rollbackError);
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: e.message,
+      data: null,
+    });
+  } finally {
+    client.release();
+  }
+});
+
 module.exports = router;
