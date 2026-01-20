@@ -7,8 +7,6 @@ const firebaseAuthMiddleware = async (req, res, next) => {
   try {
     const decoded = await admin.auth().verifyIdToken(token);
 
-    req.uid = decoded.uid;
-
     const signInProvider = decoded.firebase?.sign_in_provider ?? null;
     const provider = signInProvider ? signInProvider.replace(".com", "") : null;
 
@@ -20,6 +18,9 @@ const firebaseAuthMiddleware = async (req, res, next) => {
       });
     }
 
+    req.provider = provider;
+    req.uid = decoded.uid;
+
     const result = await db.query(
       `
       select id
@@ -28,7 +29,7 @@ const firebaseAuthMiddleware = async (req, res, next) => {
         and provider_user_id = $2
       limit 1;
       `,
-      [provider, req.uid]
+      [req.provider, req.uid]
     );
 
     if (result.rowCount === 0) {
