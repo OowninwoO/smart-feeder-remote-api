@@ -21,7 +21,7 @@ const firebaseAuthMiddleware = async (req, res, next) => {
     req.provider = provider;
     req.uid = decoded.uid;
 
-    const result = await db.query(
+    const selectResult = await db.query(
       `
       select id
       from users
@@ -32,17 +32,23 @@ const firebaseAuthMiddleware = async (req, res, next) => {
       [req.provider, req.uid]
     );
 
-    if (result.rowCount === 0) {
-      return res.status(401).json({
-        success: false,
-        message: "유저 정보를 찾을 수 없습니다.",
-        data: null,
-      });
+    if (selectResult.rowCount > 0) {
+      req.userPk = selectResult.rows[0].id;
+      return next();
     }
 
-    req.userPk = result.rows[0].id;
+    const insertResult = await db.query(
+      `
+      insert into users (provider, provider_user_id)
+      values ($1, $2)
+      returning id;
+      `,
+      [req.provider, req.uid]
+    );
 
-    next();
+    req.userPk = insertResult.rows[0].id;
+
+    return next();
   } catch (e) {
     return res.status(401).json({
       success: false,
