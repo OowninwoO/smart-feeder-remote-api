@@ -7,7 +7,7 @@ const router = express.Router();
 /// 기기 등록하기
 router.post("/register", firebaseAuthMiddleware, async (req, res) => {
   const { deviceId, deviceName, location } = req.body;
-  const userId = req.uid;
+  const userPk = req.userPk;
 
   const client = await db.connect();
 
@@ -32,10 +32,10 @@ router.post("/register", firebaseAuthMiddleware, async (req, res) => {
 
     await client.query(
       `
-      insert into user_devices (user_id, device_pk, role)
+      insert into user_devices (user_pk, device_pk, role)
       values ($1, $2, 'owner');
       `,
-      [userId, devicePk]
+      [userPk, devicePk]
     );
 
     await client.query("commit");
@@ -74,7 +74,7 @@ router.post("/register", firebaseAuthMiddleware, async (req, res) => {
 
 /// 내 기기 조회하기
 router.get("/my-devices", firebaseAuthMiddleware, async (req, res) => {
-  const userId = req.uid;
+  const userPk = req.userPk;
   const client = await db.connect();
 
   try {
@@ -90,12 +90,12 @@ router.get("/my-devices", firebaseAuthMiddleware, async (req, res) => {
         ud.created_at as "linkedAt"
       from user_devices ud
       join devices d on d.id = ud.device_pk
-      where ud.user_id = $1
+      where ud.user_pk = $1
       order by
         (ud.role = 'owner') desc,
         ud.created_at desc;
       `,
-      [userId]
+      [userPk]
     );
 
     return res.json({
@@ -117,7 +117,7 @@ router.get("/my-devices", firebaseAuthMiddleware, async (req, res) => {
 
 /// 기기 삭제(owner는 기기 자체 삭제, member는 내 연결만 해제)
 router.delete("/:deviceId", firebaseAuthMiddleware, async (req, res) => {
-  const userId = req.uid;
+  const userPk = req.userPk;
   const { deviceId } = req.params;
 
   const client = await db.connect();
@@ -133,9 +133,9 @@ router.delete("/:deviceId", firebaseAuthMiddleware, async (req, res) => {
       from devices d
       join user_devices ud on ud.device_pk = d.id
       where d.device_id = $1
-        and ud.user_id = $2;
+        and ud.user_pk = $2;
       `,
-      [deviceId, userId]
+      [deviceId, userPk]
     );
 
     if (targetResult.rowCount === 0) {
@@ -161,10 +161,10 @@ router.delete("/:deviceId", firebaseAuthMiddleware, async (req, res) => {
       await client.query(
         `
         delete from user_devices
-        where user_id = $1
+        where user_pk = $1
           and device_pk = $2;
         `,
-        [userId, devicePk]
+        [userPk, devicePk]
       );
     }
 
