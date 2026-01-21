@@ -12,7 +12,7 @@ router.post("/upsert", firebaseAuthMiddleware, async (req, res) => {
   try {
     const result = await db.query(
       `
-      insert into user_fcm_tokens (user_pk, token)
+      insert into fcm_tokens (user_pk, token)
       values ($1, $2)
       on conflict (user_pk)
       do update set

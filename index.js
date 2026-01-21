@@ -7,7 +7,7 @@ const serviceAccount = require("./serviceAccountKey.json");
 
 const devicesRoutes = require("./routes/devices");
 const usersRoutes = require("./routes/users");
-const userFcmTokensRoutes = require("./routes/user_fcm_tokens");
+const fcmTokensRoutes = require("./routes/fcm_tokens");
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
@@ -18,7 +18,7 @@ const app = express();
 app.use(express.json());
 app.use("/api/devices", devicesRoutes);
 app.use("/api/users", usersRoutes);
-app.use("/api/fcmTokens", userFcmTokensRoutes);
+app.use("/api/fcmTokens", fcmTokensRoutes);
 
 const port = process.env.PORT;
 
