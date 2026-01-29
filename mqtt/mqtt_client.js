@@ -67,6 +67,30 @@ async function sendPresenceFcm({ deviceId, status }) {
   }
 }
 
+// 기기 초기화를 FCM으로 전송
+async function sendFactoryResetFcm({ deviceId }) {
+  try {
+    const tokens = await getFcmTokensByDeviceId(deviceId);
+    if (tokens.length === 0) return;
+
+    console.log(`[FCM] send reset: device=${deviceId}, tokens=${tokens.length}`);
+
+    await admin.messaging().sendEachForMulticast({
+      tokens,
+      notification: {
+        title: "급식기 설정",
+        body: `기기(${deviceId})가 초기화되었습니다.`,
+      },
+      data: {
+        notificationType: "FEEDER_RESET",
+        deviceId: String(deviceId),
+      },
+    });
+  } catch (err) {
+    console.error("[FCM] send error:", err?.message ?? err);
+  }
+}
+
 function createMqttClient() {
   const mqttUrl = `mqtts://${process.env.MQTT_HOST}:${process.env.MQTT_PORT}`;
 
@@ -87,19 +111,7 @@ function createMqttClient() {
     });
   });
 
-  /// payload 없음
-  /// 예시) mqtt received:feeder/SF-CF3B015C/feed_button
-  /// 예시) mqtt received:feeder/SF-CF3B015C/factory_reset
-  ///
-  /// payload 있음
-  /// 예시) mqtt received:feeder/SF-CF3B015C/presence/online
-  /// 예시) mqtt received:feeder/SF-CF3B015C/presence/offline
-  /// 예시) mqtt received:feeder/SF-CF3B015C/activity/state/feeding
-  /// 예시) mqtt received:feeder/SF-CF3B015C/activity/state/idle
-  /// 예시) mqtt received:feeder/SF-CF3B015C/activity/state/unknown
-  /// 예시) mqtt received:feeder/SF-CF3B015C/activity/event/feeding_started_remote
-  /// 예시) mqtt received:feeder/SF-CF3B015C/activity/event/feeding_finished_remote
-  client.on("message", (topic, payload) => {
+  client.on("message", async (topic, payload) => {
     const message = payload ? payload.toString("utf8") : null;
     const parts = String(topic).split("/");
     const deviceId = parts[1];
@@ -110,17 +122,31 @@ function createMqttClient() {
       console.log(`mqtt received:${topic}`);
     }
 
-    insertMqttLog({
+    if (!deviceId) return;
+
+    await insertMqttLog({
       deviceId,
       topic,
       payload: message && message.length > 0 ? message : null,
     });
 
-    if (parts.length >= 3 && parts[2] === "presence") {
-      const status = message;
-      if (status === "online" || status === "offline") {
-        sendPresenceFcm({ deviceId, status });
+    // 하나의 MQTT 메시지에 하나의 FCM만 처리
+    // - factory_reset: 기기 초기화 알림 FCM 전송
+    // - presence: 온라인/오프라인 상태 알림 FCM 전송
+    switch (parts[2]) {
+      case "factory_reset": {
+        await sendFactoryResetFcm({ deviceId });
+        break;
       }
+      case "presence": {
+        const status = message;
+        if (status === "online" || status === "offline") {
+          await sendPresenceFcm({ deviceId, status });
+        }
+        break;
+      }
+      default:
+        break;
     }
   });
 
