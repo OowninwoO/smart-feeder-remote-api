@@ -115,7 +115,9 @@ router.get("/my-devices", firebaseAuthMiddleware, async (req, res) => {
   }
 });
 
-/// 기기 삭제(owner는 기기 자체 삭제, member는 내 연결만 해제)
+/// 기기 연결 해제
+/// owner: 불가(소유권 이전 안내)
+/// member: user_devices에서만 삭제
 router.delete("/:deviceId", firebaseAuthMiddleware, async (req, res) => {
   const userPk = req.userPk;
   const { deviceId } = req.params;
@@ -150,29 +152,28 @@ router.delete("/:deviceId", firebaseAuthMiddleware, async (req, res) => {
     const { devicePk, role } = targetResult.rows[0];
 
     if (role === "owner") {
-      await client.query(
-        `
-        delete from devices
-        where id = $1;
-        `,
-        [devicePk]
-      );
-    } else {
-      await client.query(
-        `
-        delete from user_devices
-        where user_pk = $1
-          and device_pk = $2;
-        `,
-        [userPk, devicePk]
-      );
+      await client.query("rollback");
+      return res.status(403).json({
+        success: false,
+        message: "오너는 기기 연결을 해제할 수 없습니다. 소유권 이전 후 다시 시도해 주세요.",
+        data: { deviceId, role },
+      });
     }
+
+    await client.query(
+      `
+      delete from user_devices
+      where user_pk = $1
+        and device_pk = $2;
+      `,
+      [userPk, devicePk]
+    );
 
     await client.query("commit");
 
     return res.json({
       success: true,
-      message: "기기가 삭제되었습니다.",
+      message: "기기 연결이 해제되었습니다.",
       data: { deviceId, role },
     });
   } catch (e) {
