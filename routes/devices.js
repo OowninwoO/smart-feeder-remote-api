@@ -125,8 +125,6 @@ router.delete("/:deviceId", firebaseAuthMiddleware, async (req, res) => {
   const client = await db.connect();
 
   try {
-    await client.query("begin");
-
     const targetResult = await client.query(
       `
       select
@@ -141,7 +139,6 @@ router.delete("/:deviceId", firebaseAuthMiddleware, async (req, res) => {
     );
 
     if (targetResult.rowCount === 0) {
-      await client.query("rollback");
       return res.status(404).json({
         success: false,
         message: "기기를 찾을 수 없습니다.",
@@ -152,7 +149,6 @@ router.delete("/:deviceId", firebaseAuthMiddleware, async (req, res) => {
     const { devicePk, role } = targetResult.rows[0];
 
     if (role === "owner") {
-      await client.query("rollback");
       return res.status(403).json({
         success: false,
         message: "오너는 기기 연결을 해제할 수 없습니다. 소유권 이전 후 다시 시도해 주세요.",
@@ -169,8 +165,6 @@ router.delete("/:deviceId", firebaseAuthMiddleware, async (req, res) => {
       [userPk, devicePk]
     );
 
-    await client.query("commit");
-
     return res.json({
       success: true,
       message: "기기 연결이 해제되었습니다.",
@@ -178,13 +172,6 @@ router.delete("/:deviceId", firebaseAuthMiddleware, async (req, res) => {
     });
   } catch (e) {
     console.error(e);
-
-    try {
-      await client.query("rollback");
-    } catch (rollbackError) {
-      console.error(rollbackError);
-    }
-
     return res.status(500).json({
       success: false,
       message: e.message,
