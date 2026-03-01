@@ -14,28 +14,62 @@ router.post("/register", firebaseAuthMiddleware, async (req, res) => {
   try {
     await client.query("begin");
 
-    const deviceResult = await client.query(
+    const existingDevice = await client.query(
       `
-      insert into devices (device_id, device_name, location)
-      values ($1, $2, $3)
-      returning
+      select
         id,
         device_id as "deviceId",
         device_name as "deviceName",
         location,
-        created_at as "createdAt";
+        created_at as "createdAt"
+      from devices
+      where device_id = $1;
       `,
-      [deviceId, deviceName, location]
+      [deviceId]
     );
 
-    const devicePk = deviceResult.rows[0].id;
+    let device;
+    let role;
+
+    if (existingDevice.rowCount === 0) {
+      const createdDevice = await client.query(
+        `
+        insert into devices (device_id, device_name, location)
+        values ($1, $2, $3)
+        returning
+          id,
+          device_id as "deviceId",
+          device_name as "deviceName",
+          location,
+          created_at as "createdAt";
+        `,
+        [deviceId, deviceName, location]
+      );
+
+      device = createdDevice.rows[0];
+      role = "owner";
+    } else {
+      device = existingDevice.rows[0];
+
+      const connectionCountResult = await client.query(
+        `
+        select count(*) as "count"
+        from user_devices
+        where device_pk = $1;
+        `,
+        [device.id]
+      );
+
+      const connectionCount = connectionCountResult.rows[0].count;
+      role = connectionCount === 0 ? "owner" : "member";
+    }
 
     await client.query(
       `
       insert into user_devices (user_pk, device_pk, role)
-      values ($1, $2, 'owner');
+      values ($1, $2, $3);
       `,
-      [userPk, devicePk]
+      [userPk, device.id, role]
     );
 
     await client.query("commit");
@@ -43,7 +77,10 @@ router.post("/register", firebaseAuthMiddleware, async (req, res) => {
     return res.json({
       success: true,
       message: "기기가 성공적으로 등록되었습니다.",
-      data: deviceResult.rows[0],
+      data: {
+        ...device,
+        role,
+      },
     });
   } catch (e) {
     console.error(e);
@@ -52,14 +89,6 @@ router.post("/register", firebaseAuthMiddleware, async (req, res) => {
       await client.query("rollback");
     } catch (rollbackError) {
       console.error(rollbackError);
-    }
-
-    if (e.code === "23505") {
-      return res.status(409).json({
-        success: false,
-        message: "이미 등록된 기기입니다.",
-        data: null,
-      });
     }
 
     return res.status(500).json({
