@@ -9,16 +9,17 @@ router.post("/upsert", firebaseAuthMiddleware, async (req, res) => {
   const userPk = req.userPk;
   const { token } = req.body;
 
+  const client = await db.connect();
+
   try {
-    const result = await db.query(
+    await client.query(
       `
       insert into fcm_tokens (user_pk, token)
       values ($1, $2)
       on conflict (user_pk)
       do update set
         token = excluded.token,
-        updated_at = now()
-      returning token;
+        updated_at = now();
       `,
       [userPk, token]
     );
@@ -26,7 +27,7 @@ router.post("/upsert", firebaseAuthMiddleware, async (req, res) => {
     return res.json({
       success: true,
       message: "FCM 토큰이 성공적으로 저장되었습니다.",
-      data: result.rows[0],
+      data: null,
     });
   } catch (e) {
     console.error(e);
@@ -35,6 +36,8 @@ router.post("/upsert", firebaseAuthMiddleware, async (req, res) => {
       message: e.message,
       data: null,
     });
+  } finally {
+    client.release();
   }
 });
 
