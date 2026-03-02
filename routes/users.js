@@ -10,8 +10,10 @@ router.post("/upsertMe", firebaseAuthMiddleware, async (req, res) => {
   const providerUserId = req.uid;
   const { nickname, profileImageUrl } = req.body;
 
+  const client = await db.connect();
+
   try {
-    const result = await db.query(
+    const result = await client.query(
       `
       insert into users (provider, provider_user_id, nickname, profile_image_url)
       values ($1, $2, $3, $4)
@@ -19,7 +21,13 @@ router.post("/upsertMe", firebaseAuthMiddleware, async (req, res) => {
       do update set
         nickname = excluded.nickname,
         profile_image_url = excluded.profile_image_url
-      returning id, provider, provider_user_id as "providerUserId", nickname, profile_image_url as "profileImageUrl", created_at as "createdAt";
+      returning
+        id,
+        provider,
+        provider_user_id as "providerUserId",
+        nickname,
+        profile_image_url as "profileImageUrl",
+        created_at as "createdAt";
       `,
       [provider, providerUserId, nickname ?? null, profileImageUrl ?? null]
     );
@@ -36,12 +44,15 @@ router.post("/upsertMe", firebaseAuthMiddleware, async (req, res) => {
       message: e.message,
       data: null,
     });
+  } finally {
+    client.release();
   }
 });
 
 /// 회원탈퇴 (DB 계정 삭제)
 router.delete("/withdraw", firebaseAuthMiddleware, async (req, res) => {
   const userPk = req.userPk;
+
   const client = await db.connect();
 
   try {
