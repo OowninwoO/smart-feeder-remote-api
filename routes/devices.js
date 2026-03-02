@@ -6,8 +6,8 @@ const router = express.Router();
 
 /// 기기 등록하기
 router.post("/register", firebaseAuthMiddleware, async (req, res) => {
-  const { deviceId, deviceName, location } = req.body;
   const userPk = req.userPk;
+  const { deviceId, deviceName, location } = req.body;
 
   const client = await db.connect();
 
@@ -77,10 +77,7 @@ router.post("/register", firebaseAuthMiddleware, async (req, res) => {
     return res.json({
       success: true,
       message: "기기가 성공적으로 등록되었습니다.",
-      data: {
-        ...device,
-        role,
-      },
+      data: null,
     });
   } catch (e) {
     console.error(e);
@@ -104,6 +101,7 @@ router.post("/register", firebaseAuthMiddleware, async (req, res) => {
 /// 내 기기 조회하기
 router.get("/my-devices", firebaseAuthMiddleware, async (req, res) => {
   const userPk = req.userPk;
+
   const client = await db.connect();
 
   try {
@@ -181,7 +179,7 @@ router.delete("/:deviceId", firebaseAuthMiddleware, async (req, res) => {
       return res.status(403).json({
         success: false,
         message: "오너는 기기 연결을 해제할 수 없습니다. 소유권 이전 후 다시 시도해 주세요.",
-        data: { deviceId, role },
+        data: null,
       });
     }
 
@@ -197,7 +195,7 @@ router.delete("/:deviceId", firebaseAuthMiddleware, async (req, res) => {
     return res.json({
       success: true,
       message: "기기 연결이 해제되었습니다.",
-      data: { deviceId, role },
+      data: null,
     });
   } catch (e) {
     console.error(e);
