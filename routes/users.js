@@ -39,4 +39,68 @@ router.post("/upsertMe", firebaseAuthMiddleware, async (req, res) => {
   }
 });
 
+/// 회원탈퇴 (DB 계정 삭제)
+router.delete("/withdraw", firebaseAuthMiddleware, async (req, res) => {
+  const userPk = req.userPk;
+  const client = await db.connect();
+
+  try {
+    await client.query("begin");
+
+    const ownerCheck = await client.query(
+      `
+      select 1
+      from user_devices
+      where user_pk = $1
+        and role = 'owner'
+      limit 1;
+      `,
+      [userPk]
+    );
+
+    if (ownerCheck.rowCount > 0) {
+      await client.query("rollback");
+      return res.status(403).json({
+        success: false,
+        message:
+          "오너로 등록된 기기가 있어 회원탈퇴가 불가능합니다. 소유권 이전 후 다시 시도해 주세요.",
+        data: null,
+      });
+    }
+
+    // users 삭제 → user_devices, fcm_tokens는 ON DELETE CASCADE로 자동 삭제됨
+    await client.query(
+      `
+      delete from users
+      where id = $1;
+      `,
+      [userPk]
+    );
+
+    await client.query("commit");
+
+    return res.json({
+      success: true,
+      message: "회원탈퇴가 완료되었습니다.",
+      data: null,
+    });
+  } catch (e) {
+    console.error(e);
+
+    try {
+      await client.query("rollback");
+    } catch (rollbackError) {
+      console.error(rollbackError);
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: e.message,
+      data: null,
+    });
+  } finally {
+    client.release();
+  }
+});
+
 module.exports = router;
