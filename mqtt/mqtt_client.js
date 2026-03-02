@@ -1,13 +1,15 @@
 require("dotenv").config();
 
 const mqtt = require("mqtt");
-const pool = require("../db");
+const db = require("../db");
 const admin = require("firebase-admin");
 
 // mqtt 메시지 로그를 DB에 저장하고, 생성된 로그 1건을 반환(FCM data로 전달용)
 async function insertMqttLog({ deviceId, topic, payload }) {
+  const client = await db.connect();
+
   try {
-    const { rows } = await pool.query(
+    const { rows } = await client.query(
       `
       insert into mqtt_logs (device_id, topic, payload)
       values ($1, $2, $3)
@@ -19,13 +21,17 @@ async function insertMqttLog({ deviceId, topic, payload }) {
     return rows[0];
   } catch (err) {
     console.error("[MQTT] log insert error:", err?.message ?? err);
+  } finally {
+    client.release();
   }
 }
 
 // deviceId로 알림 대상 FCM 토큰 조회
 async function getFcmTokensByDeviceId(deviceId) {
+  const client = await db.connect();
+
   try {
-    const { rows } = await pool.query(
+    const { rows } = await client.query(
       `
       select distinct ft.token
       from devices d
@@ -41,6 +47,8 @@ async function getFcmTokensByDeviceId(deviceId) {
   } catch (err) {
     console.error("[FCM] token query error:", err?.message ?? err);
     return [];
+  } finally {
+    client.release();
   }
 }
 
