@@ -2,7 +2,7 @@ const admin = require("firebase-admin");
 const db = require("../db");
 
 const firebaseAuthMiddleware = async (req, res, next) => {
-  const token = req.headers.authorization.split(" ")[1];
+  const token = req.headers.authorization?.split(" ")[1];
 
   const client = await db.connect();
 
@@ -12,43 +12,23 @@ const firebaseAuthMiddleware = async (req, res, next) => {
     const signInProvider = decoded.firebase?.sign_in_provider ?? null;
     const provider = signInProvider ? signInProvider.replace(".com", "") : null;
 
-    if (!provider) {
-      return res.status(401).json({
-        success: false,
-        message: "인증 제공자 정보를 확인할 수 없습니다.",
-        data: null,
-      });
-    }
-
     req.provider = provider;
     req.uid = decoded.uid;
 
-    const selectResult = await client.query(
-      `
-      select id
-      from users
-      where provider = $1
-        and provider_user_id = $2
-      limit 1;
-      `,
-      [req.provider, req.uid]
-    );
-
-    if (selectResult.rowCount > 0) {
-      req.userPk = selectResult.rows[0].id;
-      return next();
-    }
-
-    const insertResult = await client.query(
+    const result = await client.query(
       `
       insert into users (provider, provider_user_id)
       values ($1, $2)
+      on conflict (provider, provider_user_id)
+      do update set
+        provider = excluded.provider,
+        provider_user_id = excluded.provider_user_id
       returning id;
       `,
       [req.provider, req.uid]
     );
 
-    req.userPk = insertResult.rows[0].id;
+    req.userPk = result.rows[0].id;
 
     return next();
   } catch (e) {
